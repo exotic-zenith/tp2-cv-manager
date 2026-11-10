@@ -6,24 +6,36 @@ import {
   Param,
   ParseIntPipe,
   Patch,
-  Post,
+  UseGuards,
 } from '@nestjs/common';
-import { CreateUserDto } from './dto/create-user.dto';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
+import { UserRole } from '../common/enums/user-role.enum';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
 import { UserService } from './user.service';
 
 /**
- * CRUD classique sur les utilisateurs.
- * (La protection par role arrivera sur la branche 'auth'.)
+ * Administration des utilisateurs : reservee aux admins.
+ * @Roles est pose sur la CLASSE : il s'applique donc a toutes les
+ * routes du controleur, sauf celles qui le redefinissent.
  */
 @Controller('user')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN)
 export class UserController {
   constructor(private readonly userService: UserService) {}
 
-  @Post()
-  create(@Body() createUserDto: CreateUserDto): Promise<User> {
-    return this.userService.create(createUserDto);
+  /**
+   * Exception a la regle : chacun peut lire son propre profil.
+   * @Roles() vide ecrase (getAllAndOverride) le @Roles de la classe.
+   */
+  @Get('me')
+  @Roles()
+  getMe(@CurrentUser() user: User): User {
+    return user;
   }
 
   @Get()

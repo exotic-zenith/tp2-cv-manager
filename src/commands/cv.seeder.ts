@@ -9,6 +9,7 @@ import {
   randUserName,
 } from '@ngneat/falso';
 import { AppModule } from '../app.module';
+import { UserRole } from '../common/enums/user-role.enum';
 import { CvService } from '../cv/cv.service';
 import { SkillService } from '../skill/skill.service';
 import { User } from '../user/entities/user.entity';
@@ -72,21 +73,31 @@ async function bootstrap() {
     );
     console.log(`${skills.length} competences disponibles.`);
 
+    console.log('--- Seed d un compte admin ---');
+    const admin = await creerUserSiAbsent(userService, {
+      username: 'admin',
+      email: 'admin@cv.tn',
+      password: 'admin123',
+      role: UserRole.ADMIN,
+    });
+    console.log(`Admin : ${admin.username} / admin123`);
+
     console.log('--- Seed des utilisateurs et de leurs cvs ---');
     for (let i = 0; i < NB_USERS; i++) {
       const user = await creerUserSiAbsent(userService, {
         username: `${randUserName()}_${i}`,
         email: `user${i}_${randEmail()}`,
         password: 'user123',
+        role: UserRole.USER,
       });
 
       for (let j = 0; j < NB_CVS_PAR_USER; j++) {
-        const cv = await cvService.createCv(
+        const cv = await cvService.createForUser(
           {
             name: randLastName(),
             firstname: randFirstName(),
             age: randNumber({ min: 18, max: 60 }),
-            // Un CIN unique : derive du compteur + horodatage.
+            // Un CIN unique : 8 chiffres derives du compteur + aleatoire.
             cin: `${randNumber({ min: 10, max: 99 })}${Date.now()
               .toString()
               .slice(-4)}${i}${j}`,
@@ -113,7 +124,12 @@ async function bootstrap() {
 /** Idempotence : relancer le seed ne doit pas planter sur les uniques. */
 async function creerUserSiAbsent(
   userService: UserService,
-  data: { username: string; email: string; password: string },
+  data: {
+    username: string;
+    email: string;
+    password: string;
+    role: UserRole;
+  },
 ): Promise<User> {
   const existing = await userService.findForAuthentication(data.username);
   return existing ?? userService.create(data);

@@ -7,35 +7,30 @@ import {
   ParseIntPipe,
   Patch,
   Post,
-  Req,
+  UseGuards,
 } from '@nestjs/common';
-// 'import type' : AuthenticatedRequest est une interface, elle n'existe
-// qu'a la compilation. Sans ce mot-cle, TypeScript refuse de la voir
-// apparaitre dans la signature d'une methode decoree.
-import type { AuthenticatedRequest } from '../common/interfaces/authenticated-request.interface';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CreateTodoDto } from './dto/create-todo.dto';
 import { UpdateTodoDto } from './dto/update-todo.dto';
 import { Todo } from './entities/todo.entity';
 import { TodoService } from './todo.service';
 
 /**
- * ============ EXERCICE 1 (suite) ============
+ * BRANCHE auth : le AuthMiddleware ayant ete desactive, ce controleur
+ * passe lui aussi par Passport.
  *
- * Ce controleur ne porte AUCUN guard : c'est le AuthMiddleware branche
- * dans AppModule.configure() qui protege les routes d'ecriture
- * (POST / PATCH / DELETE) et qui remplit req.userId.
+ * Avant (master) :   req.userId rempli par le middleware
+ * Maintenant     :   @UseGuards(JwtAuthGuard) + @CurrentUser('id')
  *
- * On lit donc le user via @Req() ici, volontairement, pour montrer la
- * difference avec le module Cv qui, lui, utilise Passport + @CurrentUser.
- *
- * Le "!" apres req.userId indique a TypeScript que la valeur est forcement
- * presente : le middleware a deja repondu 401 dans le cas contraire.
+ * La regle metier, elle, n'a pas bouge : a l'ajout on rattache le todo
+ * au user connecte, et seul son createur peut le modifier/supprimer.
  */
 @Controller('todo')
 export class TodoController {
   constructor(private readonly todoService: TodoService) {}
 
-  /** Lecture libre : le middleware n'est pas branche sur les GET. */
+  /** Lecture libre : pas de guard sur les GET. */
   @Get()
   findAll(): Promise<Todo[]> {
     return this.todoService.findAll();
@@ -46,31 +41,31 @@ export class TodoController {
     return this.todoService.findOneById(id);
   }
 
-  /** A l'ajout, on rattache le todo au user extrait du token. */
   @Post()
+  @UseGuards(JwtAuthGuard)
   create(
     @Body() createTodoDto: CreateTodoDto,
-    @Req() req: AuthenticatedRequest,
+    @CurrentUser('id') userId: number,
   ): Promise<Todo> {
-    return this.todoService.createForUser(createTodoDto, req.userId!);
+    return this.todoService.createForUser(createTodoDto, userId);
   }
 
-  /** Seul le createur du todo peut le modifier. */
   @Patch(':id')
+  @UseGuards(JwtAuthGuard)
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateTodoDto: UpdateTodoDto,
-    @Req() req: AuthenticatedRequest,
+    @CurrentUser('id') userId: number,
   ): Promise<Todo> {
-    return this.todoService.updateForUser(id, updateTodoDto, req.userId!);
+    return this.todoService.updateForUser(id, updateTodoDto, userId);
   }
 
-  /** Seul le createur du todo peut le supprimer. */
   @Delete(':id')
+  @UseGuards(JwtAuthGuard)
   remove(
     @Param('id', ParseIntPipe) id: number,
-    @Req() req: AuthenticatedRequest,
+    @CurrentUser('id') userId: number,
   ): Promise<{ message: string }> {
-    return this.todoService.removeForUser(id, req.userId!);
+    return this.todoService.removeForUser(id, userId);
   }
 }

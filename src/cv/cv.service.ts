@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, Repository } from 'typeorm';
+import { AUTH_ERRORS } from '../common/constants/error.messages';
+import { UserRole } from '../common/enums/user-role.enum';
 import { GenericCrudService } from '../common/services/generic-crud.service';
 import { SkillService } from '../skill/skill.service';
 import { User } from '../user/entities/user.entity';
@@ -16,30 +18,52 @@ export class CvService extends GenericCrudService<Cv> {
     protected readonly repository: Repository<Cv>,
     private readonly skillService: SkillService,
   ) {
-    // create / findAll / findOneById / update / remove / restore sont
-    // heritees de GenericCrudService : on ne les reecrit pas ici.
     super(repository, 'Cv');
   }
 
   /**
-   * Creation d'un cv avec rattachement des competences (ManyToMany).
-   * Le proprietaire (user) est optionnel a ce stade : il sera impose
-   * par le user connecte sur la branche 'auth'.
+   * Creation d'un cv : le proprietaire n'est JAMAIS envoye par le
+   * client, il est impose par le serveur a partir du user connecte.
+   * (Sinon n'importe qui pourrait creer un cv au nom d'un autre.)
    */
-  async createCv(createCvDto: CreateCvDto, user?: User): Promise<Cv> {
+  async createForUser(createCvDto: CreateCvDto, user: User): Promise<Cv> {
     const { skillIds, ...cvData } = createCvDto;
 
     const cv = this.repository.create({
       ...cvData,
-      ...(user ? { user } : {}),
+      user,
       skills: await this.skillService.findByIds(skillIds ?? []),
     });
 
     return this.repository.save(cv);
   }
 
-  async updateCv(id: number, updateCvDto: UpdateCvDto): Promise<Cv> {
+  /**
+   * Liste des cvs selon le role :
+   *  - ADMIN : tous les cvs de l'application,
+   *  - USER  : uniquement les siens.
+   */
+  findAllForUser(user: User): Promise<Cv[]> {
+    if (this.isAdmin(user)) {
+      return this.repository.find();
+    }
+    return this.repository.find({ where: { user: { id: user.id } } });
+  }
+
+  /** Lecture d'un cv precis, avec controle de propriete. */
+  async findOneForUser(id: number, user: User): Promise<Cv> {
     const cv = await this.findOneById(id);
+    this.assertCanManage(cv, user);
+    return cv;
+  }
+
+  async updateForUser(
+    id: number,
+    updateCvDto: UpdateCvDto,
+    user: User,
+  ): Promise<Cv> {
+    const cv = await this.findOneById(id);
+    this.assertCanManage(cv, user);
 
     const { skillIds, ...cvData } = updateCvDto;
     const updated = this.repository.merge(cv, cvData);
@@ -52,9 +76,17 @@ export class CvService extends GenericCrudService<Cv> {
     return this.repository.save(updated);
   }
 
-  /** Recherche paginee sur name / firstname / job et sur l'age. */
+  async removeForUser(id: number, user: User): Promise<{ message: string }> {
+    const cv = await this.findOneById(id);
+    this.assertCanManage(cv, user);
+    await this.repository.softRemove(cv);
+    return { message: `Cv d'id ${id} supprime avec succes.` };
+  }
+
+  /** Recherche paginee (admin : global, user : limitee a ses cvs). */
   async search(
     searchCvDto: SearchCvDto,
+    user: User,
   ): Promise<{ page: number; limit: number; total: number; data: Cv[] }> {
     const { critere, age, page = 1, limit = 10 } = searchCvDto;
 
@@ -63,9 +95,11 @@ export class CvService extends GenericCrudService<Cv> {
       .leftJoinAndSelect('cv.user', 'user')
       .leftJoinAndSelect('cv.skills', 'skill');
 
+    if (!this.isAdmin(user)) {
+      query.andWhere('user.id = :userId', { userId: user.id });
+    }
+
     if (critere) {
-      // Brackets regroupe les OR entre parentheses, sinon ils
-      // annuleraient les AND precedents.
       query.andWhere(
         new Brackets((qb) => {
           qb.where('cv.name LIKE :critere', { critere: `%${critere}%` })
@@ -86,5 +120,22 @@ export class CvService extends GenericCrudService<Cv> {
       .getMany();
 
     return { page, limit, total, data };
+  }
+
+  private isAdmin(user: User): boolean {
+    return user?.role === UserRole.ADMIN;
+  }
+
+  /**
+   * Regle metier centrale du TP : un user ne peut modifier/supprimer
+   * que SES cvs. L'admin, lui, n'est pas limite.
+   */
+  private assertCanManage(cv: Cv, user: User): void {
+    if (this.isAdmin(user)) {
+      return;
+    }
+    if (cv.user?.id !== user.id) {
+      throw new ForbiddenException(AUTH_ERRORS.NOT_OWNER);
+    }
   }
 }

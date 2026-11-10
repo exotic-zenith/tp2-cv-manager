@@ -1,11 +1,14 @@
 import {
   IsEmail,
+  IsEnum,
   IsNotEmpty,
+  IsOptional,
   IsString,
   MaxLength,
   MinLength,
 } from 'class-validator';
 import { VALIDATION_ERRORS } from '../../common/constants/error.messages';
+import { UserRole } from '../../common/enums/user-role.enum';
 
 export class CreateUserDto {
   @IsString({ message: VALIDATION_ERRORS.IS_STRING('username') })
@@ -22,4 +25,8 @@ export class CreateUserDto {
   @IsNotEmpty({ message: VALIDATION_ERRORS.REQUIRED('password') })
   @MinLength(6, { message: VALIDATION_ERRORS.MIN_LENGTH('password', 6) })
   password: string;
+
+  @IsOptional()
+  @IsEnum(UserRole, { message: `Le role doit valoir 'user' ou 'admin'.` })
+  role?: UserRole;
 }
