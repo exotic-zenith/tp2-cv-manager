@@ -1,98 +1,88 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# TP2 NestJS — RT4 2026/2027 — Gestionnaire de CVs
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+API REST NestJS 11 + TypeORM/MySQL : gestion de CVs, de compétences et
+d'utilisateurs, avec authentification JWT (Passport) et autorisation par rôles.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+> Une explication complète, exercice par exercice et ligne par ligne, se trouve
+> dans **`../EXPLICATION-TP2.txt`**.
 
-## Description
+## Prérequis
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- Node.js 18+
+- Un serveur MySQL démarré, avec une base `cv_db` créée :
 
-## Project setup
-
-```bash
-$ npm install
+```sql
+CREATE DATABASE IF NOT EXISTS cv_db;
 ```
 
-## Compile and run the project
+## Configuration
 
-```bash
-# development
-$ npm run start
+Copier `.env.example` en `.env` et renseigner les valeurs :
 
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+```
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=
+DB_NAME=cv_db
+PORT=3000
+JWT_SECRET=...
+JWT_EXPIRES_IN=3600
 ```
 
-## Run tests
+## Commandes
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm install
+npm run start:dev    # serveur en mode watch sur http://localhost:3000
+npm run seed:cvs     # remplit la base (10 skills, 1 admin, 5 users, 15 cvs)
+npm run build
+npm run lint
 ```
 
-## Deployment
+Comptes créés par le seed : `admin / admin123` (rôle admin) et 5 comptes
+utilisateurs avec le mot de passe `user123`.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+## Branches
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+| Branche  | Contenu |
+|----------|---------|
+| `master` | Exercices 1 à 3 : `AuthMiddleware` actif sur les routes d'écriture de `/todo`, entités `Cv`/`Skill`/`User` et leurs relations, seed via standalone application. |
+| `auth`   | Middleware désactivé, `AuthModule` (bcrypt + JWT), `JwtStrategy` Passport, `JwtAuthGuard`, `RolesGuard` (RBAC), règles de propriété sur les CVs. |
 
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+## Endpoints (branche `auth`)
+
+| Méthode | Route            | Accès |
+|---------|------------------|-------|
+| POST    | `/auth/signup`   | public |
+| POST    | `/auth/login`    | public — renvoie `access_token` |
+| GET     | `/auth/me`       | connecté |
+| GET     | `/cv`            | connecté — admin : tous, user : les siens |
+| GET     | `/cv/search`     | connecté — recherche paginée |
+| POST    | `/cv`            | connecté — le propriétaire est le user connecté |
+| GET/PATCH/DELETE | `/cv/:id` | propriétaire ou admin |
+| GET     | `/skill`         | connecté |
+| POST/PATCH/DELETE | `/skill`, `/skill/:id` | admin |
+| GET     | `/user/me`       | connecté |
+| GET/PATCH/DELETE | `/user`, `/user/:id` | admin |
+| GET     | `/todo`, `/todo/:id` | public |
+| POST/PATCH/DELETE | `/todo`, `/todo/:id` | connecté — seul le créateur modifie/supprime |
+
+Sur la branche `master`, les routes d'écriture de `/todo` attendent à la place
+un header `auth-user` contenant un JWT porteur d'un `userId`.
+
+## Architecture
+
+```
+src/
+├── common/          code partagé : BaseEntity, GenericCrudService<T>,
+│                    messages d'erreur, middleware, guards, décorateurs
+├── config/          clés des variables d'environnement
+├── user/ skill/ cv/ todo/    modules métier (module/controller/service/entity/dto)
+├── auth/            signup, login, JwtStrategy (branche auth)
+└── commands/        cv.seeder.ts — standalone application
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+La factorisation demandée par le TP est portée par `BaseEntity`
+(`createdAt`/`updatedAt`/`deletedAt`) et `GenericCrudService<T>` (les six
+opérations CRUD écrites une seule fois, héritées par chaque service métier).
